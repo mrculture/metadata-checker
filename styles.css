@@ -1,3 +1,6 @@
+.site-footer { margin: 24px; }
+.site-footer a { color: #9de4d0; }
+
 :root {
   color-scheme: dark;
   --page: #07100f;

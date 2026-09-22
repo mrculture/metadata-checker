@@ -52,17 +52,17 @@ const checks = [
     key: "canonical",
     label: "Canonical URL",
     severity: "warning",
-    test: (data) => Boolean(data.canonical),
+    test: (data) => Boolean(data.canonical && absoluteUrl(data.canonical, data.sourceUrl || undefined)),
     pass: (data) => data.canonical,
-    fail: "Add a canonical link to reduce duplicate URL ambiguity.",
+    fail: "Add a valid HTTP(S) canonical link to reduce duplicate URL ambiguity.",
   },
   {
     key: "robots",
     label: "Indexability",
     severity: "critical",
-    test: (data) => !/noindex/i.test(data.robots || ""),
+    test: (data) => !/(?:^|[\s,])(?:noindex|none)(?:$|[\s,])/i.test(data.robots || ""),
     pass: (data) => data.robots || "No blocking robots tag found.",
-    fail: "Robots tag contains noindex.",
+    fail: "Robots metadata contains noindex or none. Keep this if the page should stay out of search.",
   },
   {
     key: "ogTitle",
@@ -84,7 +84,7 @@ const checks = [
     key: "ogImage",
     label: "Open Graph image",
     severity: "critical",
-    test: (data) => Boolean(data.ogImage),
+    test: (data) => Boolean(data.ogImage && data.displayImage),
     pass: (data) => data.ogImage,
     fail: "Add og:image with an absolute, crawlable image URL.",
     warn: (data) => data.ogImage && !/^https?:\/\//i.test(data.ogImage),
@@ -156,9 +156,10 @@ function getMeta(doc, selector) {
 function absoluteUrl(value, base) {
   if (!value) return "";
   try {
-    return new URL(value, base || window.location.href).href;
+    const url = new URL(value, base || "https://example.com/");
+    return /^https?:$/.test(url.protocol) ? url.href : "";
   } catch {
-    return value;
+    return "";
   }
 }
 
@@ -167,10 +168,10 @@ function parseHtml(html, sourceUrl = "") {
   const base = sourceUrl || getMeta(doc, 'meta[property="og:url"]') || doc.querySelector("link[rel='canonical']")?.href || "";
   const data = {
     sourceUrl,
-    title: doc.querySelector("title")?.textContent?.trim() || getMeta(doc, 'meta[property="og:title"]'),
+    title: doc.querySelector("title")?.textContent?.trim() || "",
     description: getMeta(doc, 'meta[name="description"]'),
     canonical: doc.querySelector("link[rel='canonical']")?.getAttribute("href")?.trim() || "",
-    robots: getMeta(doc, 'meta[name="robots"]'),
+    robots: Array.from(doc.querySelectorAll('meta[name="robots" i], meta[name="googlebot" i]')).map(node => node.getAttribute("content") || "").join(", "),
     viewport: getMeta(doc, 'meta[name="viewport"]'),
     language: doc.documentElement.getAttribute("lang") || "",
     ogTitle: getMeta(doc, 'meta[property="og:title"]'),
@@ -244,6 +245,7 @@ function evaluate(data) {
 function runAudit(sourceLabel = "HTML parsed") {
   const html = $("#html-input").value.trim();
   if (!html) {
+    clearResults();
     setSourceState("No HTML", "warning");
     return;
   }
@@ -255,18 +257,33 @@ function runAudit(sourceLabel = "HTML parsed") {
 
 async function fetchUrl() {
   const url = $("#page-url").value.trim();
-  if (!url) {
-    setSourceState("URL missing", "warning");
+  clearResults();
+  let parsed;
+  try { parsed = new URL(url); } catch { /* Show a helpful validation error below. */ }
+  if (!parsed || !/^https?:$/.test(parsed.protocol) || parsed.username || parsed.password) {
+    setSourceState("Enter a valid HTTP or HTTPS URL without credentials", "warning");
     return;
   }
+  $("#fetch-url").disabled = true;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  const originalHtml = $("#html-input").value;
   setSourceState("Fetching", "neutral");
   try {
-    const response = await fetch(url);
+    const response = await fetch(parsed.href, { signal: controller.signal, credentials: "omit", referrerPolicy: "no-referrer" });
+    if (!response.ok) throw new Error(`Fetch failed (HTTP ${response.status}). Paste page HTML instead.`);
+    if (!/text\/html|application\/xhtml\+xml/i.test(response.headers.get("content-type") || "")) throw new Error("URL did not return HTML. Paste page HTML instead.");
     const html = await response.text();
+    if ($("#page-url").value.trim() !== url || $("#html-input").value !== originalHtml) return;
     $("#html-input").value = html;
     runAudit("URL fetched");
-  } catch {
-    setSourceState("Paste HTML", "warning");
+  } catch (error) {
+    if ($("#page-url").value.trim() === url && $("#html-input").value === originalHtml) {
+      setSourceState(error.message?.startsWith("Fetch failed") || error.message?.startsWith("URL did") ? error.message : "Fetch failed or blocked by browser access rules. Paste page HTML instead.", "warning");
+    }
+  } finally {
+    clearTimeout(timeout);
+    $("#fetch-url").disabled = false;
   }
 }
 
@@ -279,6 +296,8 @@ function setSourceState(label, tone) {
 function render() {
   const result = state.result;
   if (!result) return;
+  $("#copy-snippet").disabled = false;
+  $("#download-report").disabled = false;
   renderScore(result);
   renderFindings(result);
   renderPreviews(result);
@@ -323,16 +342,16 @@ function renderFindings(result) {
 }
 
 function renderPreviews(result) {
-  const url = new URL(result.displayUrl, window.location.href);
+  const url = new URL(absoluteUrl(result.displayUrl) || "https://example.com/");
   $("#serp-url").textContent = url.hostname + url.pathname;
   $("#serp-title").textContent = result.title || result.displayTitle;
   $("#serp-description").textContent = result.description || result.displayDescription;
   $("#social-domain").textContent = url.hostname;
   $("#social-title").textContent = result.displayTitle;
   $("#social-description").textContent = result.displayDescription;
-  $("#social-image").innerHTML = result.displayImage
-    ? `<img src="${escapeAttribute(result.displayImage)}" alt="" />`
-    : "<span>No image</span>";
+  $("#social-image").textContent = result.displayImage
+    ? "Image URL detected. External images are not loaded automatically for privacy."
+    : "No valid image URL";
 }
 
 function renderTags(result) {
@@ -349,7 +368,7 @@ function renderTags(result) {
 function renderSnippet(result) {
   const title = result.title || result.displayTitle;
   const description = result.description || result.displayDescription;
-  const canonical = result.canonical || result.displayUrl;
+  const canonical = absoluteUrl(result.canonical, result.sourceUrl || undefined) || absoluteUrl(result.displayUrl) || "https://example.com/page";
   const image = result.displayImage || "https://example.com/share-card.png";
   const lines = [
     `<title>${escapeHtml(title)}</title>`,
@@ -359,18 +378,29 @@ function renderSnippet(result) {
     `<meta property="og:title" content="${escapeAttribute(result.ogTitle || title)}" />`,
     `<meta property="og:description" content="${escapeAttribute(result.ogDescription || description)}" />`,
     `<meta property="og:type" content="${escapeAttribute(result.ogType || "website")}" />`,
-    `<meta property="og:url" content="${escapeAttribute(result.ogUrl || canonical)}" />`,
+    `<meta property="og:url" content="${escapeAttribute(absoluteUrl(result.ogUrl, canonical) || canonical)}" />`,
     `<meta property="og:image" content="${escapeAttribute(image)}" />`,
     `<meta name="twitter:card" content="${escapeAttribute(result.twitterCard || "summary_large_image")}" />`,
     `<meta name="twitter:title" content="${escapeAttribute(result.twitterTitle || title)}" />`,
     `<meta name="twitter:description" content="${escapeAttribute(result.twitterDescription || description)}" />`,
-    `<meta name="twitter:image" content="${escapeAttribute(result.twitterImage || image)}" />`,
+    `<meta name="twitter:image" content="${escapeAttribute(absoluteUrl(result.twitterImage, canonical) || image)}" />`,
   ];
   $("#snippet-code").textContent = lines.join("\n");
 }
 
 async function copySnippet() {
-  await navigator.clipboard.writeText($("#snippet-code").textContent);
+  if (!state.result) return;
+  try {
+    await navigator.clipboard.writeText($("#snippet-code").textContent);
+  } catch {
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents($("#snippet-code"));
+    selection.removeAllRanges();
+    selection.addRange(range);
+    setSourceState("Clipboard blocked. Snippet selected; copy it manually.", "warning");
+    return;
+  }
   $("#copy-snippet").textContent = "Copied";
   setTimeout(() => {
     $("#copy-snippet").textContent = "Copy";
@@ -417,8 +447,20 @@ function loadSample() {
 function clearInput() {
   $("#page-url").value = "";
   $("#html-input").value = "";
-  state.result = null;
+  clearResults();
   setSourceState("Cleared", "neutral");
+}
+
+function clearResults() {
+  state.result = null;
+  ["#finding-list", "#tag-table", "#snippet-code", "#serp-url", "#serp-title", "#serp-description", "#social-domain", "#social-title", "#social-description", "#social-image"].forEach(selector => $(selector).textContent = "");
+  ["#score-value", "#critical-count", "#warning-count", "#tag-count", "#canonical-state"].forEach(selector => $(selector).textContent = "—");
+  $("#score-label").textContent = "No audit";
+  $("#score-state").textContent = "No audit";
+  $(".score-ring").style.background = "none";
+  $("#summary-box").textContent = "Paste HTML or fetch a page to start an audit.";
+  $("#copy-snippet").disabled = true;
+  $("#download-report").disabled = true;
 }
 
 function updateBackToTop() {
