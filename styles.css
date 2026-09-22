@@ -1,5 +1,8 @@
 .site-footer { margin: 24px; }
 .site-footer a { color: #9de4d0; }
+.not-found { min-height: 100vh; }
+.not-found main { margin: 24px; }
+.not-found a { color: #9de4d0; }
 
 :root {
   color-scheme: dark;
