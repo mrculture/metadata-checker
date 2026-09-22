@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Metadata Checker | UtilityShelf</title>
+    <meta
+      name="description"
+      content="Audit page titles, descriptions, canonical tags, robots directives, Open Graph cards, and Twitter metadata before launch."
+    />
+    <meta property="og:title" content="Metadata Checker | UtilityShelf" />
+    <meta
+      property="og:description"
+      content="A browser-first launch QA tool for checking search and social metadata before a page goes live."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://metadata-checker.utilityshelf.site/" />
+    <link rel="canonical" href="https://metadata-checker.utilityshelf.site/" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="nav-rail" aria-label="Metadata Checker navigation">
+        <div class="nav-logo" aria-hidden="true">MC</div>
+        <a class="nav-icon is-active" href="#check" aria-label="Checker"><span>Q</span><b>Check</b></a>
+        <a class="nav-icon" href="#findings" aria-label="Findings"><span>F</span><b>Find</b></a>
+        <a class="nav-icon" href="#previews" aria-label="Previews"><span>P</span><b>Preview</b></a>
+        <a class="nav-icon" href="#snippet" aria-label="Snippet"><span>S</span><b>Tags</b></a>
+      </aside>
+
+      <section id="check" class="hero">
+        <div class="hero__media" aria-hidden="true">
+          <img src="assets/metadata-hero.png" alt="" />
+        </div>
+        <div class="hero__copy">
+          <p class="eyebrow">Metadata Checker</p>
+          <h1>Audit search and social tags before launch.</h1>
+          <p>
+            Paste a page URL or raw HTML, then review missing tags, content lengths,
+            indexability signals, card previews, and a clean metadata snippet.
+          </p>
+          <div class="hero__actions">
+            <button class="button button--primary" id="start-tour" type="button">Start guided tour</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="checker-grid" aria-label="Metadata input and score">
+        <section class="panel input-panel">
+          <div class="panel__head">
+            <div>
+              <p class="eyebrow">Source</p>
+              <h2>Page input</h2>
+            </div>
+            <span class="status-pill" id="source-state">Sample loaded</span>
+          </div>
+
+          <label class="field">
+            <span>URL</span>
+            <input id="page-url" type="url" placeholder="https://example.com/page" />
+          </label>
+
+          <div class="input-actions">
+            <button class="button button--primary" id="fetch-url" type="button">Fetch URL</button>
+            <button class="button button--secondary" id="load-sample" type="button">Load sample</button>
+            <button class="button button--secondary" id="clear-input" type="button">Clear</button>
+          </div>
+
+          <label class="field">
+            <span>Raw HTML</span>
+            <textarea id="html-input" rows="12" spellcheck="false"></textarea>
+          </label>
+        </section>
+
+        <section class="panel score-panel">
+          <div class="panel__head">
+            <div>
+              <p class="eyebrow">Health</p>
+              <h2>Metadata score</h2>
+            </div>
+            <span class="status-pill" id="score-state">Good</span>
+          </div>
+
+          <div class="score-layout">
+            <div class="ring score-ring" aria-label="Metadata score">
+              <span id="score-value">82</span>
+              <small id="score-label">Ready</small>
+            </div>
+            <div class="metric-list">
+              <div class="metric-row"><span>Critical gaps</span><strong id="critical-count">1</strong></div>
+              <div class="metric-row"><span>Warnings</span><strong id="warning-count">3</strong></div>
+              <div class="metric-row"><span>Detected tags</span><strong id="tag-count">11</strong></div>
+              <div class="metric-row"><span>Canonical</span><strong id="canonical-state">Found</strong></div>
+            </div>
+          </div>
+
+          <div class="summary-box" id="summary-box">
+            Title and description are present. Open Graph image needs attention.
+          </div>
+        </section>
+      </section>
+
+      <section class="dashboard">
+        <section id="findings" class="panel findings-panel">
+          <div class="panel__head">
+            <div>
+              <p class="eyebrow">Audit</p>
+              <h2>Findings</h2>
+            </div>
+            <div class="segmented" role="group" aria-label="Finding filter">
+              <button class="segment is-active" data-filter="all" type="button">All</button>
+              <button class="segment" data-filter="critical" type="button">Critical</button>
+              <button class="segment" data-filter="warning" type="button">Warnings</button>
+              <button class="segment" data-filter="pass" type="button">Passes</button>
+            </div>
+          </div>
+          <div class="finding-list" id="finding-list"></div>
+        </section>
+
+        <section id="previews" class="preview-stack">
+          <section class="panel">
+            <div class="panel__head">
+              <div>
+                <p class="eyebrow">Search</p>
+                <h2>Result preview</h2>
+              </div>
+            </div>
+            <article class="serp-card">
+              <p class="serp-url" id="serp-url">example.com</p>
+              <h3 id="serp-title">Metadata Checker Launch Page</h3>
+              <p id="serp-description">
+                Fast metadata audit for search snippets, Open Graph cards, Twitter Cards, and launch QA.
+              </p>
+            </article>
+          </section>
+
+          <section class="panel">
+            <div class="panel__head">
+              <div>
+                <p class="eyebrow">Social</p>
+                <h2>Share card</h2>
+              </div>
+            </div>
+            <article class="social-card">
+              <div class="social-image" id="social-image">
+                <span>No image</span>
+              </div>
+              <div class="social-copy">
+                <p id="social-domain">example.com</p>
+                <h3 id="social-title">Metadata Checker Launch Page</h3>
+                <p id="social-description">
+                  Fast metadata audit for search snippets, Open Graph cards, Twitter Cards, and launch QA.
+                </p>
+              </div>
+            </article>
+          </section>
+        </section>
+      </section>
+
+      <section class="tag-grid">
+        <section class="panel detected-panel">
+          <div class="panel__head">
+            <div>
+              <p class="eyebrow">Inventory</p>
+              <h2>Detected metadata</h2>
+            </div>
+          </div>
+          <div class="tag-table" id="tag-table"></div>
+        </section>
+
+        <section id="snippet" class="panel snippet-panel">
+          <div class="panel__head">
+            <div>
+              <p class="eyebrow">Output</p>
+              <h2>Recommended snippet</h2>
+            </div>
+            <div class="output-actions">
+              <button class="button button--secondary" id="copy-snippet" type="button">Copy</button>
+              <button class="button button--primary" id="download-report" type="button">Report</button>
+            </div>
+          </div>
+          <pre><code id="snippet-code"></code></pre>
+        </section>
+      </section>
+    </main>
+
+    <div class="floating-actions" aria-label="Quick page actions">
+      <a class="float-button back-to-top" id="back-to-top" href="#check" aria-label="Back to top">Top</a>
+    </div>
+
+    <div class="tour-overlay" id="tour-overlay" hidden>
+      <div class="tour-shade" aria-hidden="true"></div>
+      <section class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title">
+        <div class="tour-progress">
+          <span id="tour-step-count">Step 1 of 6</span>
+          <button class="tour-close" id="tour-close" type="button" aria-label="Close tour">x</button>
+        </div>
+        <h2 id="tour-title">Start with a source</h2>
+        <p id="tour-copy">Paste raw HTML or fetch a URL, then the audit updates from the current page metadata.</p>
+        <div class="tour-actions">
+          <button class="button button--secondary" id="tour-prev" type="button">Back</button>
+          <button class="button button--primary" id="tour-next" type="button">Next</button>
+        </div>
+      </section>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
